@@ -14,7 +14,7 @@ namespace Business.Rules;
 /// </summary>
 public static class NoteRules
 {
-    public const int TitleMaxLength = 10;
+    public const int TitleMaxLength = 100;
     public const int ContentMaxLength = 500;
 
     /// <summary>
