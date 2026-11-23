@@ -1,0 +1,23 @@
+name: ✨ Özellik isteği
+description: Yeni bir özellik öner
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: istek
+    attributes:
+      label: Ne istiyorsun?
+    validations:
+      required: true
+  - type: textarea
+    id: neden
+    attributes:
+      label: Neden gerekli?
+  - type: textarea
+    id: kabul
+    attributes:
+      label: Kabul kriterleri
+      description: Ne olursa bu iş "bitti" sayılır?
+      placeholder: |
+        - [ ] Boş not kaydedilmiyor
+        - [ ] 200 karakterden uzun not kaydedilmiyor

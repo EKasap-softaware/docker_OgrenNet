@@ -1,0 +1,34 @@
+# ===========================================================================
+# CI ADIM 1: İLK CI dosyan (en sade hali).
+# Yeri: .github/workflows/ci.yml
+#
+# Sonraki adımda bunun yerine 2-ci-tam.yml kullanılacak (Docker testi eklenir).
+# ===========================================================================
+name: CI                              # Actions sekmesinde görünen ad
+
+on:                                   # NE ZAMAN çalışsın?
+  push:
+    branches: [main]                  #   main'e kod gelince
+  pull_request:                       #   PR açılınca / güncellenince
+
+jobs:                                 # NE YAPSIN?
+  build-test:                         # işin kimliği (ruleset'te bu adı seçeceksin)
+    runs-on: ubuntu-latest            # GitHub'ın ücretsiz Linux makinesi
+
+    steps:                            # sırayla çalışan adımlar
+      - name: Kodu indir
+        uses: actions/checkout@v7     # "uses" = hazır bir action kullan
+
+      - name: .NET 8 SDK kur
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Bağımlılıkları yükle
+        run: dotnet restore DockerOgrenNet.sln   # "run" = terminal komutu
+
+      - name: Derle
+        run: dotnet build DockerOgrenNet.sln -c Release --no-restore
+
+      - name: Testleri çalıştır
+        run: dotnet test DockerOgrenNet.sln -c Release --no-build

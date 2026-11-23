@@ -1,0 +1,33 @@
+# ===========================================================================
+# Release: "v1.2.3" gibi bir etiket (tag) gönderilince GitHub'da otomatik
+# bir Release sayfası oluşturur. Sürüm notlarını PR başlıklarından üretir.
+#
+#   git tag -a v1.0.0 -m "İlk sürüm"
+#   git push origin v1.0.0
+# ===========================================================================
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write               # Release oluşturmak için yazma izni gerekir
+
+jobs:
+  release:
+    name: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # gh = GitHub CLI. GitHub'ın makinelerinde hazır kurulu gelir.
+      # --generate-notes: son sürümden bu yana merge edilen PR'ları listeler.
+      - name: Release oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

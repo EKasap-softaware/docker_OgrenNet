@@ -1,0 +1,30 @@
+# ===========================================================================
+# .gitattributes: Dosyaların Git'te NASIL saklanacağını söyler.
+#
+# Sorun: Windows satır sonunu CRLF (\r\n), Linux/Mac LF (\n) ile yazar.
+# Windows'ta yazdığın bir .sh betiği CRLF ile Linux'a (GitHub Actions'a, Docker'a)
+# giderse şu meşhur hatayı alırsın:
+#     $'\r': command not found
+#
+# Çözüm: Repoda her şeyi LF sakla. Betikleri ve YAML'ları her zaman LF tut.
+# ===========================================================================
+
+# Git metin dosyalarını otomatik tanısın, repoda LF olarak saklasın
+* text=auto
+
+# Linux'ta çalışacak dosyalar: bilgisayarında bile LF kalsın
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+
+# Windows'a özel dosyalar: CRLF kalsın
+*.sln         text eol=crlf
+*.ps1         text eol=crlf
+*.bat         text eol=crlf
+
+# İkili (binary) dosyalar: Git içlerine dokunmasın, diff göstermesin
+*.png         binary
+*.jpg         binary
+*.ico         binary
+*.pfx         binary

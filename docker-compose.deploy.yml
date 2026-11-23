@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# CD için: Bu dosya docker-compose.yml'nin ÜSTÜNE eklenir (override).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build
+#
+# Ne değişir? "app" servisi kaynak koddan BUILD EDİLMEZ; GitHub Container
+# Registry'deki (ghcr.io) hazır image çalıştırılır. Gerçek sunucularda da
+# böyle yapılır: sunucuda kod derlenmez, sadece hazır image çekilir.
+#
+# APP_IMAGE ortam değişkeni verilmezse compose hata verir (:? sözdizimi).
+#   Örnek: APP_IMAGE=ghcr.io/kullaniciadin/dockerogrennet:latest
+# ---------------------------------------------------------------------------
+services:
+  app:
+    image: ${APP_IMAGE:?APP_IMAGE ortam degiskeni gerekli, ornek ghcr.io/kullanici/dockerogrennet:latest}

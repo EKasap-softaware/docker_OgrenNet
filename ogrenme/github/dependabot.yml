@@ -1,0 +1,34 @@
+# ===========================================================================
+# Dependabot: Kullandığın paketlerin yeni sürümleri çıkınca SENİN YERİNE PR açar.
+# Güvenlik açığı olan paketler için ayrıca uyarı verir.
+# CI bu PR'ları da test eder; yeşilse gönül rahatlığıyla merge edersin.
+# ===========================================================================
+version: 2
+updates:
+  # .NET (NuGet) paketleri: EF Core, Npgsql, Redis, Swagger, xunit...
+  # "/" -> kökteki DockerOgrenNet.sln'i bulur, içindeki tüm projeleri tarar.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:                     # test paketlerini tek PR'da topla
+      test-paketleri:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk"]
+
+  # src/WebAPI/Dockerfile içindeki FROM satırları (dotnet/aspnet, dotnet/sdk)
+  - package-ecosystem: docker
+    directory: /src/WebAPI
+    schedule:
+      interval: weekly
+
+  # docker-compose.yml'deki image'lar (postgres, redis)
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+
+  # Workflow dosyalarındaki action sürümleri (actions/checkout@v7 ...)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

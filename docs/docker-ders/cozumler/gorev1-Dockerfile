@@ -1,0 +1,31 @@
+# Görev 1: tek aşamalı Dockerfile  ->  src/NotDefteri/Dockerfile olarak kullan
+
+# 1) Temel image: içinde .NET 8 SDK olan Linux (derleme yapabilmek için)
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+# 2) Container içindeki çalışma klasörü
+WORKDIR /src
+
+# 3) ÖNCE sadece proje dosyasını kopyala ve paketleri indir.
+#    Bu katman cache'lenir: .csproj değişmedikçe restore tekrar çalışmaz.
+COPY NotDefteri.csproj .
+RUN dotnet restore
+
+# 4) Sonra kodun geri kalanını kopyala (en sık değişen kısım en sonda)
+COPY . .
+
+# 5) Derle ve yayınla (çıktı /app klasörüne)
+RUN dotnet publish -c Release -o /app
+
+# 6) TUZAĞIN ÇÖZÜMÜ (b yolu):
+#    .NET 8 image'ları varsayılan olarak 8080'i dinler.
+#    Ya bunu 5000 yaparsın:
+#        ENV ASPNETCORE_HTTP_PORTS=5000
+#    ya da (a yolu) Dockerfile'a dokunmadan run komutunu değiştirirsin:
+#        docker run --rm -p 5000:8080 not-defteri:1.0
+#    Gerçek projelerde genellikle 8080 bırakılır ve -p 5000:8080 kullanılır.
+#    Aşağıdaki satır sadece belgeleme amaçlı, portu AÇMAZ:
+EXPOSE 8080
+
+# 7) Container başlarken çalışacak komut (build sırasında DEĞİL)
+ENTRYPOINT ["dotnet", "/app/NotDefteri.dll"]

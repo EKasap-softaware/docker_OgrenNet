@@ -1,0 +1,44 @@
+# Görev 3: multi-stage Dockerfile  ->  src/NotDefteri/Dockerfile olarak kullan
+
+# =========================================================================
+# 1. AŞAMA: build  (SDK var, büyük, sadece derlemek için)
+# =========================================================================
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+COPY NotDefteri.csproj .
+RUN dotnet restore
+
+COPY . .
+# --no-restore: paketler zaten yukarıda indirildi.
+# (Bu ancak .dockerignore ile bin/obj dışarıda tutulduğu için güvenli,
+#  aksi halde Windows'tan gelen obj/ klasörü restore sonucunu ezer ve hata verir.)
+RUN dotnet publish -c Release -o /app/publish --no-restore -p:UseAppHost=false
+
+# =========================================================================
+# 2. AŞAMA: final  (sadece ASP.NET runtime var, küçük)
+# =========================================================================
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+
+# 1. aşamadan SADECE derlenmiş çıktıyı al. SDK, kaynak kod ve sifreler.txt buraya gelmez.
+COPY --from=build /app/publish .
+
+# Varsayılan port 8080 (ASPNETCORE_HTTP_PORTS=8080). Çalıştırırken: -p 5000:8080
+EXPOSE 8080
+
+# Bonus B4: root olmayan kullanıcıyla çalıştır (güvenlik)
+# USER $APP_UID
+
+ENTRYPOINT ["dotnet", "NotDefteri.dll"]
+
+# -------------------------------------------------------------------------
+# Düşün sorularının cevapları:
+# - Son image'da Program.cs YOK: sadece DLL'ler ve appsettings.json var.
+# - sifreler.txt son image'da YOK, çünkü publish çıktısına girmiyor.
+#   Ama .dockerignore yine de gerekli:
+#     * build aşaması da bir image katmanı, ve "docker build --target build"
+#       ya da build cache ile o dosya yine erişilebilir olur
+#     * bin/obj sorunu ortadan kalkmaz
+#     * build context küçülür, build hızlanır
+# -------------------------------------------------------------------------

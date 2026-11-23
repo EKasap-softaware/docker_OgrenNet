@@ -1,0 +1,38 @@
+# Görev 6  ->  proje köküne (.sln dosyasının yanına) docker-compose.yml olarak kopyala
+# Görev 4 + 5'teki bütün "docker run" komutlarının karşılığı budur.
+
+services:
+  app:
+    build: ./src/NotDefteri          # = docker build ./src/NotDefteri
+    image: not-defteri:2.0
+    ports:
+      - "5000:8080"                  # bilgisayar:container  (.NET 8 içeride 8080'i dinler)
+    environment:                     # = -e ...   (appsettings.json'u ezer)
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Username=postgres;Password=postgres;Database=notlar"
+      ConnectionStrings__Redis: "redis:6379"
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: notlar
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # ports YOK: app ağ içinden bağlanıyor.
+    # VS'den bağlanmak istersen:  ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  pgdata:
+
+# Network yazmadık: Compose otomatik olarak "<klasöradı>_default" adında bir ağ kurar.
+#
+# --scale app=3 neden hata verir?
+#   Üç container da bilgisayarındaki 5000 portunu almaya çalışır, ama bir portu
+#   aynı anda yalnızca bir container kullanabilir. Çözümü Bonus B5'te.

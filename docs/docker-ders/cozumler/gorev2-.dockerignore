@@ -1,0 +1,22 @@
+# src/NotDefteri/.dockerignore olarak kullan
+# Burada yazanlar "docker build" sırasında Docker'a GÖNDERİLMEZ.
+
+# .NET derleme çıktıları: Windows'a göre üretildi, Linux'ta sorun çıkarır.
+# Özellikle obj/project.assets.json dosyası C:\Users\...\.nuget yollarını içerir.
+bin/
+obj/
+
+# Gizli bilgiler
+.env
+sifreler.txt
+
+# Loglar
+*.log
+
+# IDE dosyaları
+.vs/
+*.user
+
+# Docker dosyalarının kendisi
+Dockerfile
+.dockerignore

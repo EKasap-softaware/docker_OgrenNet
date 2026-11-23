@@ -1,0 +1,101 @@
+# ===========================================================================
+# CI (Continuous Integration / Sürekli Entegrasyon)
+#
+# Görevi: Her PR'da kodun SAĞLAM olduğunu kanıtlamak.
+#   1. build-test   -> .NET kodu derleniyor mu, birim testleri geçiyor mu?
+#   2. docker-smoke -> Docker image oluşuyor mu, API Postgres ve Redis ile
+#                      birlikte gerçekten ayağa kalkıyor mu?
+#
+# Bu dosya ayrıca "reusable workflow"dur (workflow_call): cd.yml onu çağırır.
+# Böylece aynı test adımlarını iki kere yazmayız (DRY: Don't Repeat Yourself).
+# ===========================================================================
+name: CI
+
+on:
+  pull_request:                 # PR açıldığında / güncellendiğinde
+  workflow_dispatch:            # Actions sekmesindeki "Run workflow" butonu
+  workflow_call:                # başka bir workflow tarafından çağrılınca (cd.yml)
+
+# Aynı PR'a art arda push yaparsan eski çalışma iptal edilir, sadece en yenisi çalışır.
+# Not: workflow_call ile çağrıldığında grup adı çağıranın adıyla birleşir, çakışma olmaz.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# En az yetki prensibi: bu workflow sadece kodu OKUYABİLİR.
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------
+  build-test:
+    name: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15         # bir şey takılırsa 6 saat beklemesin
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v7
+
+      - name: .NET 8 SDK kur
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      # NuGet paketlerini önbelleğe al: ikinci çalışmadan itibaren restore çok hızlanır.
+      # Anahtar (key) .csproj dosyalarının özetidir; paket değişirse önbellek yenilenir.
+      - name: NuGet önbelleği
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Bağımlılıkları yükle (restore)
+        run: dotnet restore DockerOgrenNet.sln
+
+      - name: Derle (build)
+        run: dotnet build DockerOgrenNet.sln --configuration Release --no-restore
+
+      - name: Testleri çalıştır
+        run: >
+          dotnet test DockerOgrenNet.sln
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-sonuclari.trx"
+          --results-directory TestResults
+
+      # Testler kırılsa bile (if: always) sonuç dosyasını sakla, indirip inceleyebil.
+      - name: Test sonuçlarını sakla
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-sonuclari
+          path: TestResults/
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  docker-smoke:
+    name: docker-smoke
+    needs: build-test           # birim testleri geçmeden bu iş başlamaz
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v7
+
+      - name: Image'ı build et ve tüm servisleri başlat
+        run: docker compose up -d --build
+
+      - name: Smoke test (/health)
+        run: bash scripts/smoke-test.sh http://localhost:5000
+
+      # Sadece bir şey kırılırsa logları göster: hatanın sebebi genelde burada yazar.
+      - name: Hata olursa container loglarını göster
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Temizlik
+        if: always()
+        run: docker compose down -v

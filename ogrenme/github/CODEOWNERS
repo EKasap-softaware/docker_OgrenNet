@@ -1,0 +1,8 @@
+# Bu dosyadaki yollar değişince ilgili kişi OTOMATİK olarak PR inceleyicisi atanır.
+# "KULLANICI_ADIN" yerine kendi GitHub kullanıcı adını yaz.
+# En alttaki eşleşen kural kazanır.
+
+*                     @KULLANICI_ADIN
+/.github/             @KULLANICI_ADIN
+/src/Business/        @KULLANICI_ADIN
+/src/DataAccess/      @KULLANICI_ADIN

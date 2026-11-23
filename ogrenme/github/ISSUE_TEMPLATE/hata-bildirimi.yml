@@ -1,0 +1,26 @@
+name: 🐞 Hata bildirimi
+description: Bir şey beklendiği gibi çalışmıyor
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: ne-oldu
+    attributes:
+      label: Ne oldu?
+      description: Hatayı kısaca anlat
+    validations:
+      required: true
+  - type: textarea
+    id: adimlar
+    attributes:
+      label: Nasıl tekrar oluşturulur?
+      placeholder: |
+        1. Sayfayı aç
+        2. ... butonuna bas
+        3. Hata görünüyor
+    validations:
+      required: true
+  - type: textarea
+    id: beklenen
+    attributes:
+      label: Ne olmasını bekliyordun?

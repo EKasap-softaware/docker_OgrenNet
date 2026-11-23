@@ -1,0 +1,167 @@
+# ===========================================================================
+# CD (Continuous Delivery / Sürekli Teslimat)
+#
+# Akış:
+#   main'e merge  ─► ci (testler) ─► publish (image → ghcr.io) ─► staging
+#   v1.2.3 tag'i  ─► ci ─► publish ─► staging ─► [ONAY] ─► production
+#
+# Neden "deploy" işleri GitHub'ın makinesinde çalışıyor?
+# Gerçek bir sunucumuz yok. Bu yüzden ghcr.io'daki image'ı çekip Postgres ve
+# Redis ile birlikte çalıştırıyor, /health ile doğruluyoruz. Gerçek sunucuda
+# komutlar BİREBİR aynıdır; sadece "runs-on" değişir (bkz. bonus: self-hosted runner).
+# ===========================================================================
+name: CD
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]            # v1.0.0, v2.3.1 gibi sürüm etiketleri
+  workflow_dispatch:
+
+# Deploy'lar sıraya girsin, yarıda kesilmesin (cancel-in-progress: false).
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # 1) Önce CI'ı aynen çalıştır (reusable workflow). Testler geçmezse hiçbir şey yayınlanmaz.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # 2) Docker image'ı oluştur ve GitHub Container Registry'ye (ghcr.io) gönder.
+  publish:
+    name: publish-image
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write           # ghcr.io'ya image yazabilmek için
+    outputs:
+      image: ${{ steps.isim.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # ghcr.io image adları KÜÇÜK HARF olmak zorunda. Repo adı "DockerOgrenNet"
+      # olduğu için bunu küçük harfe çeviriyoruz: ${VAR,,} bash'te küçük harf yapar.
+      - name: Image adını hazırla
+        id: isim
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Image: $IMAGE"
+
+      - name: Docker Buildx kur
+        uses: docker/setup-buildx-action@v4
+
+      # GITHUB_TOKEN: GitHub'ın her çalışmaya otomatik verdiği geçici anahtar.
+      # Hiçbir secret oluşturmana gerek yok.
+      - name: ghcr.io'ya giriş yap
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Hangi etiketlerin (tag) verileceğini otomatik hesaplar:
+      #   main'e push  -> :latest ve :sha-1a2b3c4
+      #   v1.2.3 tag'i -> :1.2.3, :1.2 ve :sha-1a2b3c4
+      - name: Etiketleri hesapla
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.isim.outputs.image }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build et ve gönder
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: src/WebAPI/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha              # katmanları GitHub önbelleğinden al
+          cache-to: type=gha,mode=max       # (ikinci build çok daha hızlı olur)
+
+  # 3) Staging (test ortamı): her main güncellemesinde otomatik.
+  deploy-staging:
+    name: deploy-staging
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: staging        # Settings → Environments'ta görünür
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: ghcr.io'ya giriş yap
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # type=sha etiketi commit kimliğinin ilk 7 karakterini kullanır: sha-1a2b3c4
+      # Böylece TAM OLARAK bu commit'ten üretilen image çalıştırılır.
+      - name: Yayınlanan image'ı çalıştır
+        env:
+          IMAGE: ${{ needs.publish.outputs.image }}
+        run: |
+          export APP_IMAGE="$IMAGE:sha-${GITHUB_SHA::7}"
+          echo "APP_IMAGE=$APP_IMAGE" >> "$GITHUB_ENV"   # sonraki adımlar da görsün
+          echo "Deploy edilen image: $APP_IMAGE"
+          docker compose -f docker-compose.yml -f docker-compose.deploy.yml pull app
+          docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build
+
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh
+
+      - name: Hata olursa loglar
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.deploy.yml logs --no-color
+
+  # 4) Production (canlı ortam): SADECE sürüm etiketi (v*) gelince ve ONAYDAN sonra.
+  #    Onayı Settings → Environments → production → Required reviewers ile açarsın.
+  deploy-production:
+    name: deploy-production
+    needs: [publish, deploy-staging]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: ghcr.io'ya giriş yap
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Etiket "v1.2.3" ise image etiketi "1.2.3" olur (baştaki v atılır).
+      - name: Sürüm image'ını çalıştır
+        env:
+          IMAGE: ${{ needs.publish.outputs.image }}
+        run: |
+          SURUM="${GITHUB_REF_NAME#v}"
+          export APP_IMAGE="$IMAGE:$SURUM"
+          echo "Production'a çıkan sürüm: $APP_IMAGE"
+          docker compose -f docker-compose.yml -f docker-compose.deploy.yml pull app
+          docker compose -f docker-compose.yml -f docker-compose.deploy.yml up -d --no-build
+
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh

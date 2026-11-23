@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not Defteri</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, "Segoe UI", sans-serif; background: #f4f6f9; color: #1d2330; margin: 0; padding: 32px 16px; }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    h1 { margin: 0; font-size: 28px; }
+    .durum span { font-size: 12px; padding: 4px 10px; border-radius: 99px; margin-left: 6px; background: #e6eaf2; }
+    .ok { background: #d8f3e3 !important; color: #13834b; }
+    .down { background: #fdecea !important; color: #c0392b; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px; }
+    input, textarea { width: 100%; padding: 10px 12px; border: 1px solid #ccd3e0; border-radius: 8px; font: inherit; margin-bottom: 8px; }
+    textarea { resize: vertical; min-height: 70px; }
+    button { padding: 10px 16px; border: 0; border-radius: 8px; background: #512bd4; color: #fff; font-size: 15px; cursor: pointer; }
+    button.sil { background: transparent; color: #c0392b; padding: 4px 8px; font-size: 13px; }
+    .mesaj { font-size: 14px; margin-left: 10px; }
+    .hata { color: #c0392b; }
+    .basari { color: #13834b; }
+    .not { border-bottom: 1px solid #eef1f6; padding: 12px 0; display: flex; justify-content: space-between; gap: 12px; }
+    .not:last-child { border-bottom: 0; }
+    .not h3 { margin: 0 0 4px; font-size: 16px; }
+    .not p { margin: 0; white-space: pre-wrap; }
+    .tarih { color: #99a1b3; font-size: 12px; margin-top: 4px; }
+    .bos { color: #99a1b3; font-style: italic; }
+    footer { text-align: center; font-size: 13px; color: #66708a; }
+    footer a { color: #512bd4; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>📝 Not Defteri</h1>
+    <div class="durum">
+      <span id="db">Veritabanı…</span>
+      <span id="redis">Redis…</span>
+    </div>
+  </header>
+
+  <!-- Not ekleme formu -->
+  <div class="card">
+    <form id="form">
+      <input id="baslik" placeholder="Başlık" maxlength="100">
+      <textarea id="icerik" placeholder="Notunu yaz…" maxlength="500"></textarea>
+      <button type="submit">Ekle</button>
+      <span id="mesaj" class="mesaj"></span>
+    </form>
+  </div>
+
+  <!-- Not listesi -->
+  <div class="card" id="liste"><span class="bos">Yükleniyor…</span></div>
+
+  <footer>Bu sayfa <a href="/swagger">Not Defteri API</a>'sini kullanır.</footer>
+</div>
+
+<script>
+  // ------------------------------------------------------------------
+  // Bu sayfa sadece bir "istemci"dir (frontend). Veriyi kendisi tutmaz;
+  // her şeyi fetch() ile API'ye sorar. API'nin adresleri:
+  //   GET    /api/notes        -> listele
+  //   POST   /api/notes        -> ekle
+  //   DELETE /api/notes/{id}   -> sil
+  //   GET    /health           -> veritabanı ve Redis durumu
+  // ------------------------------------------------------------------
+
+  const liste = document.getElementById("liste");
+  const mesaj = document.getElementById("mesaj");
+
+  // Kullanıcının yazdığı metni HTML olarak değil, düz metin olarak göster (XSS koruması)
+  function guvenli(metin) {
+    const div = document.createElement("div");
+    div.textContent = metin;
+    return div.innerHTML;
+  }
+
+  async function durumuGoster() {
+    try {
+      const cevap = await (await fetch("/health")).json();
+      for (const ad of ["db", "redis"]) {
+        const el = document.getElementById(ad);
+        el.className = cevap[ad] === "ok" ? "ok" : "down";
+        el.textContent = (ad === "db" ? "Veritabanı" : "Redis") + (cevap[ad] === "ok" ? " ✓" : " ✗");
+      }
+    } catch { /* API kapalıysa sessiz geç */ }
+  }
+
+  async function notlariGetir() {
+    const sonuc = await (await fetch("/api/notes")).json();
+    if (!sonuc.data || sonuc.data.length === 0) {
+      liste.innerHTML = '<span class="bos">Henüz not yok. İlk notunu ekle!</span>';
+      return;
+    }
+    liste.innerHTML = sonuc.data.map(n => `
+      <div class="not">
+        <div>
+          <h3>${guvenli(n.title)}</h3>
+          <p>${guvenli(n.content)}</p>
+          <div class="tarih">${new Date(n.createdAt).toLocaleString("tr-TR")}</div>
+        </div>
+        <button class="sil" onclick="notuSil(${n.id})">sil</button>
+      </div>`).join("");
+  }
+
+  async function notuSil(id) {
+    await fetch(`/api/notes/${id}`, { method: "DELETE" });
+    await notlariGetir();
+  }
+
+  document.getElementById("form").addEventListener("submit", async (e) => {
+    e.preventDefault();                       // sayfa yenilenmesin
+    const cevap = await fetch("/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: document.getElementById("baslik").value,
+        content: document.getElementById("icerik").value
+      })
+    });
+    const sonuc = await cevap.json();
+
+    // Hata mesajları (örn. "Başlık boş olamaz") Business katmanından gelir
+    mesaj.textContent = sonuc.message;
+    mesaj.className = "mesaj " + (sonuc.success ? "basari" : "hata");
+
+    if (sonuc.success) {
+      e.target.reset();
+      await notlariGetir();
+    }
+  });
+
+  durumuGoster();
+  notlariGetir();
+</script>
+</body>
+</html>

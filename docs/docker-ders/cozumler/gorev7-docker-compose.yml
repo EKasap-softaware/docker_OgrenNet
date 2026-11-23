@@ -1,0 +1,51 @@
+# Görev 7: geliştirme modu (bind mount + dotnet watch)
+
+services:
+  app:
+    image: mcr.microsoft.com/dotnet/sdk:8.0   # derleme gerektiği için SDK
+    working_dir: /src
+    command: dotnet watch run --no-launch-profile
+    # --no-launch-profile: launchSettings.json "localhost:5000" der. Container'da
+    # localhost'u dinlersen dışarıdan erişilemez. Profili yok sayınca
+    # image'ın ASPNETCORE_HTTP_PORTS=8080 ayarı geçerli olur.
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"      # Windows bind mount'ta değişiklikleri yakalar
+      DOTNET_WATCH_RESTART_ON_RUDE_EDIT: "1"    # soru sormadan yeniden başlatır
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Username=postgres;Password=postgres;Database=notlar"
+      ConnectionStrings__Redis: "redis:6379"
+    volumes:
+      - ./src/NotDefteri:/src          # BIND MOUNT: kodun kendisi
+      - /src/bin                       # ANONİM VOLUME: Windows'taki bin klasörünü örter
+      - /src/obj                       # ANONİM VOLUME: Windows'taki obj klasörünü örter
+      - nuget:/root/.nuget/packages    # NAMED VOLUME: NuGet paketleri her seferinde inmesin
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: notlar
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  pgdata:
+  nuget:
+
+# Bu dosyada üç farklı volume türünü birden görüyorsun:
+#   ./src/NotDefteri:/src   -> bind mount   (bilgisayardaki klasör)
+#   /src/bin                -> anonim volume (isimsiz, sadece üstünü örtmek için)
+#   nuget:/root/...         -> named volume  (isimli, Docker yönetir, kalıcı)
+#
+# Not: Gerçek projelerde geliştirme ayarları genellikle ayrı bir
+# docker-compose.override.yml dosyasına konur. Compose bu dosyayı otomatik
+# olarak birleştirir. Visual Studio da aynı yöntemi kullanır.
