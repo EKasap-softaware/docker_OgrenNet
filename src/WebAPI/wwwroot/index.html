@@ -36,6 +36,7 @@
 
   <header>
     <h1>📝 Not Defteri</h1>
+    <span id="sayac" class="tarih"></span>
     <div class="durum">
       <span id="db">Veritabanı…</span>
       <span id="redis">Redis…</span>
@@ -91,6 +92,7 @@
 
   async function notlariGetir() {
     const sonuc = await (await fetch("/api/notes")).json();
+    document.getElementById("sayac").textContent = `Toplam ${sonuc.data ? sonuc.data.length : 0} not`;
     if (!sonuc.data || sonuc.data.length === 0) {
       liste.innerHTML = '<span class="bos">Henüz not yok. İlk notunu ekle!</span>';
       return;
